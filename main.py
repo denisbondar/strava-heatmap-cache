@@ -4,6 +4,7 @@ import os
 from collections import namedtuple
 from random import choice
 from typing import List
+from time import time
 
 import aiofiles
 import aiohttp
@@ -163,7 +164,27 @@ class StravaFetcher:
                     await self.cache.write(tile, content)
                 # todo тут бы надо отдавать контент на обработку чтобы узнать что конкретно за ошибка
                 elif response.status == 403:
-                    raise PermissionError("[403] STRAVA Access denied. " + await response.text())
+                    """
+                    При неверных данных аутентификации:
+                    Неверный ключ:
+                    <?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidKey</Code><Message>Unknown Key</Message></Error>
+                    Неверная подпись:
+                    <?xml version="1.0" encoding="UTF-8"?><Error><Code>MalformedSignature</Code><Message>Could not unencode Signature</Message></Error>
+                    Неверная политика:
+                    <?xml version="1.0" encoding="UTF-8"?><Error><Code>MalformedPolicy</Code><Message>Malformed Policy</Message></Error>
+                    
+                    При достижении лимита приходит HTML-страница:
+                    <HTML><HEAD><META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=iso-8859-1">
+                    <TITLE>ERROR: The request could not be satisfied</TITLE>
+                    </HEAD><BODY>
+                    <H1>403 ERROR</H1>
+                    <H2>The request could not be satisfied.</H2>
+                    <HR noshade size="1px">
+                    Request blocked.
+                    We can't connect to the server for this app or website at this time. There might be too much traffic or a configuration error. Try again later, or contact the app or website owner.
+                    ...
+                    """
+                    raise PermissionError("[403] STRAVA Access denied.")
 
 
 class CacheWarmer:
@@ -183,18 +204,23 @@ class CacheWarmer:
                 tiles.append(tile)
                 if max_tiles and len(tiles) >= max_tiles:
                     break
-        print("Count tiles to load:", len(tiles))
         self.strava_fetcher.fetch(tiles)
 
 
 if __name__ == '__main__':
-    auth_data = CloudFrontAuth(os.getenv('KEY-PAIR-ID'),
+    # point_1 = (GeoPoint(float(x), float(y)) for x, y in os.getenv('AREA_APEX').split(','))
+    # point_2 = (GeoPoint(float(x), float(y)) for x, y in os.getenv('AREA_VERTEX').split(','))
+
+    auth_data = CloudFrontAuth(os.getenv('KEY_PAIR_ID'),
                                os.getenv('SIGNATURE'),
                                os.getenv('POLICY'))
-    cache = Cache(os.path.join(script_abs_dir, os.getenv('CACHE_DIR')))
+    cache = Cache(os.path.join(script_abs_dir, 'cache'))
     strava_fetcher = StravaFetcher(auth_data, cache)
     warmer = CacheWarmer(cache, strava_fetcher)
 
+    start_time = time()
     warmer.warm_up(GeoPoint(46.90946, 30.19284),
                    GeoPoint(46.10655, 31.39070),
-                   7, 15, max_tiles=1000)
+                   zoom_min=7, zoom_max=17,
+                   max_tiles=2000)
+    print("Spent in", round((time() - start_time), 2), "seconds.")

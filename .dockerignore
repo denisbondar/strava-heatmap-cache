@@ -1,0 +1,8 @@
+__pycache__/
+.git/
+.idea/
+cache/
+venv/
+.gitignore
+docker-build.sh
+docker-run.sh
