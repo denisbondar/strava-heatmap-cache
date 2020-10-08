@@ -49,10 +49,9 @@ class Tile:
     def generate_from_area(cls,
                            geo_coordinates_1: GeoPoint,
                            geo_coordinates_2: GeoPoint,
-                           zoom_min: int,
-                           zoom_max: int):
+                           zoom_range):
         """
-        >>> gen = Tile.generate_from_area(GeoPoint(46.90946, 30.19284), GeoPoint(46.10655, 31.39070), 9, 9)
+        >>> gen = Tile.generate_from_area(GeoPoint(46.90946, 30.19284), GeoPoint(46.10655, 31.39070), range(9, 10))
         >>> [t for t in gen]
         [Tile(298, 180, 9), Tile(299, 180, 9), Tile(300, 180, 9), Tile(298, 181, 9), Tile(299, 181, 9), Tile(300, 181, 9)]
         """
@@ -61,7 +60,7 @@ class Tile:
         vertex = GeoPoint(min(geo_coordinates_1.latitude, geo_coordinates_2.latitude),
                           max(geo_coordinates_1.longitude, geo_coordinates_2.longitude))
 
-        for z in range(zoom_min, zoom_max + 1):
+        for z in zoom_range:
             first_tile_x, first_tile_y = cls.geo_to_tile(apex, z)
             last_tile_x, last_tile_y = cls.geo_to_tile(vertex, z)
             for y in range(first_tile_y, last_tile_y + 1):
@@ -108,7 +107,7 @@ class StravaFetcher:
     free_tile_zoom = 11
     url_auth = "https://heatmap-external-{server}.strava.com/tiles-auth/{activity}/{color}/{z}/{x}/{y}.png"
     url_free = "https://heatmap-external-{server}.strava.com/tiles/{activity}/{color}/{z}/{x}/{y}.png"
-    semaphore_value = 5
+    semaphore_value = 10
 
     def __init__(self,
                  auth: CloudFrontAuth,
@@ -195,11 +194,10 @@ class CacheWarmer:
     def warm_up(self,
                 geo_coordinates_1: GeoPoint,
                 geo_coordinates_2: GeoPoint,
-                zoom_min: int,
-                zoom_max: int,
+                zoom_range,
                 max_tiles=None):
         tiles = []
-        for tile in Tile.generate_from_area(geo_coordinates_1, geo_coordinates_2, zoom_min, zoom_max):
+        for tile in Tile.generate_from_area(geo_coordinates_1, geo_coordinates_2, zoom_range):
             if not self.cache.tile_already_in_cache(tile):
                 tiles.append(tile)
                 if max_tiles and len(tiles) >= max_tiles:
@@ -221,6 +219,6 @@ if __name__ == '__main__':
     start_time = time()
     warmer.warm_up(GeoPoint(46.90946, 30.19284),
                    GeoPoint(46.10655, 31.39070),
-                   zoom_min=7, zoom_max=17,
+                   range(7, 17),
                    max_tiles=2000)
     print("Spent in", round((time() - start_time), 2), "seconds.")
