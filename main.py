@@ -67,12 +67,12 @@ class Tile:
                 for x in range(first_tile_x, last_tile_x + 1):
                     yield Tile(x, y, z)
 
-    @property
-    def relative_file_path(self):
-        return f"{self.z}/{self.x}/{self.y}.png.tile"
-
     def __repr__(self) -> str:
         return f"Tile({self.x}, {self.y}, {self.z})"
+
+
+def filename_for_file(tile: Tile) -> str:
+    return f"{tile.z}/{tile.x}/{tile.y}png.tile"
 
 
 Tiles = List[Tile]
@@ -100,7 +100,7 @@ class Cache:
             os.makedirs(path)
 
     def abs_tile_path(self, tile):
-        return os.path.join(self.cache_abs_path, tile.relative_file_path)
+        return os.path.join(self.cache_abs_path, filename_for_file(tile))
 
 
 class StravaFetcher:
