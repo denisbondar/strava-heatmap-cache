@@ -12,6 +12,11 @@ import aiohttp
 CloudFrontAuth = namedtuple("CloudFrontAuth", "key_pair_id signature policy")
 GeoPoint = namedtuple("GeoPoint", "latitude longitude")
 script_abs_dir = os.path.abspath(os.path.dirname(__file__))
+cache_dir = os.path.join(script_abs_dir, 'cache')
+
+auth_data = CloudFrontAuth(os.getenv('KEY_PAIR_ID'),
+                               os.getenv('SIGNATURE'),
+                               os.getenv('POLICY'))
 
 
 class Tile:
@@ -208,11 +213,7 @@ class CacheWarmer:
 if __name__ == '__main__':
     # point_1 = (GeoPoint(float(x), float(y)) for x, y in os.getenv('AREA_APEX').split(','))
     # point_2 = (GeoPoint(float(x), float(y)) for x, y in os.getenv('AREA_VERTEX').split(','))
-
-    auth_data = CloudFrontAuth(os.getenv('KEY_PAIR_ID'),
-                               os.getenv('SIGNATURE'),
-                               os.getenv('POLICY'))
-    cache = Cache(os.path.join(script_abs_dir, 'cache'))
+    cache = Cache(cache_dir)
     strava_fetcher = StravaFetcher(auth_data, cache)
     warmer = CacheWarmer(cache, strava_fetcher)
 
