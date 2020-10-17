@@ -221,5 +221,5 @@ if __name__ == '__main__':
     warmer.warm_up(GeoPoint(46.90946, 30.19284),
                    GeoPoint(46.10655, 31.39070),
                    range(7, 17),
-                   max_tiles=2000)
+                   max_tiles=6000)
     print("Spent in", round((time() - start_time), 2), "seconds.")
