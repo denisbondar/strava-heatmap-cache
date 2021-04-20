@@ -3,8 +3,8 @@ import math
 import os
 from collections import namedtuple
 from random import choice
-from typing import List
 from time import time
+from typing import List
 
 import aiofiles
 import aiohttp
@@ -15,8 +15,8 @@ script_abs_dir = os.path.abspath(os.path.dirname(__file__))
 cache_dir = os.path.join(script_abs_dir, 'cache')
 
 auth_data = CloudFrontAuth(os.getenv('KEY_PAIR_ID'),
-                               os.getenv('SIGNATURE'),
-                               os.getenv('POLICY'))
+                           os.getenv('SIGNATURE'),
+                           os.getenv('POLICY'))
 
 
 class Tile:
@@ -166,6 +166,9 @@ class StravaFetcher:
                 if response.status == 200:
                     content = await response.read()
                     await self.cache.write(tile, content)
+                elif response.status == 404:
+                    content = b""
+                    await self.cache.write(tile, content)
                 # todo тут бы надо отдавать контент на обработку чтобы узнать что конкретно за ошибка
                 elif response.status == 403:
                     """
@@ -189,6 +192,8 @@ class StravaFetcher:
                     ...
                     """
                     raise PermissionError("[403] STRAVA Access denied.")
+                else:
+                    print("ERROR. Http status %d for %r with URL %s" % (response.status, tile, response.real_url))
 
 
 class CacheWarmer:
@@ -207,6 +212,8 @@ class CacheWarmer:
                 tiles.append(tile)
                 if max_tiles and len(tiles) >= max_tiles:
                     break
+        print("%d tiles to fetch" % len(tiles))
+        print("First %r; Last %r" % (tiles[0], tiles[-1]))
         self.strava_fetcher.fetch(tiles)
 
 
