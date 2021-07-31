@@ -3,11 +3,12 @@ import math
 import os
 from collections import namedtuple
 from random import choice
-from typing import List
 from time import time
+from typing import List
 
 import aiofiles
 import aiohttp
+from aiohttp import client_exceptions
 
 CloudFrontAuth = namedtuple("CloudFrontAuth", "key_pair_id signature policy")
 GeoPoint = namedtuple("GeoPoint", "latitude longitude")
@@ -15,8 +16,13 @@ script_abs_dir = os.path.abspath(os.path.dirname(__file__))
 cache_dir = os.path.join(script_abs_dir, 'cache')
 
 auth_data = CloudFrontAuth(os.getenv('KEY_PAIR_ID'),
-                               os.getenv('SIGNATURE'),
-                               os.getenv('POLICY'))
+                           os.getenv('SIGNATURE'),
+                           os.getenv('POLICY'))
+
+EMPTY_TILE = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\x00\x00\x00\x01\x00\x01\x03\x00\x00\x00f\xbc:%\x00\x00" \
+             b"\x00\x03PLTE\x00\x00\x00\xa7z=\xda\x00\x00\x00\x01tRNS\x00@\xe6\xd8f\x00\x00\x00\x1fIDATh\xde\xed\xc1" \
+             b"\x01\r\x00\x00\x00\xc2 \xfb\xa76\xc77`\x00\x00\x00\x00\x00\x00\x00\x00q\x07!\x00\x00\x01\xa7W)\xd7\x00" \
+             b"\x00\x00\x00IEND\xaeB`\x82"
 
 
 class Tile:
@@ -80,9 +86,6 @@ def filename_for_file(tile: Tile) -> str:
     return f"{tile.z}/{tile.x}/{tile.y}png.tile"
 
 
-Tiles = List[Tile]
-
-
 class Cache:
     def __init__(self, cache_abs_path: str) -> None:
         self.cache_abs_path = cache_abs_path
@@ -109,7 +112,7 @@ class Cache:
 
 
 class StravaFetcher:
-    free_tile_zoom = 11
+    free_tile_max_zoom = 11
     url_auth = "https://heatmap-external-{server}.strava.com/tiles-auth/{activity}/{color}/{z}/{x}/{y}.png"
     url_free = "https://heatmap-external-{server}.strava.com/tiles/{activity}/{color}/{z}/{x}/{y}.png"
     semaphore_value = 10
@@ -124,7 +127,7 @@ class StravaFetcher:
         self.activity = activity
         self.color = color
 
-    def fetch(self, tiles: Tiles):
+    def fetch(self, tiles: List[Tile]):
         asyncio.run(self.task_queue(tiles))
 
     def __url(self, tile) -> str:
@@ -148,9 +151,9 @@ class StravaFetcher:
         return params
 
     def __tile_is_free(self, tile: Tile):
-        return tile.z <= self.free_tile_zoom
+        return tile.z <= self.free_tile_max_zoom
 
-    async def task_queue(self, tiles: Tiles):
+    async def task_queue(self, tiles: List[Tile]):
         tasks = []
         for tile in tiles:
             tasks.append(asyncio.create_task(self.download_tile(tile)))
@@ -162,33 +165,19 @@ class StravaFetcher:
         url = self.__url(tile)
         params = self.__url_params(tile)
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, params=params) as response:
-                if response.status == 200:
-                    content = await response.read()
-                    await self.cache.write(tile, content)
-                # todo тут бы надо отдавать контент на обработку чтобы узнать что конкретно за ошибка
-                elif response.status == 403:
-                    """
-                    При неверных данных аутентификации:
-                    Неверный ключ:
-                    <?xml version="1.0" encoding="UTF-8"?><Error><Code>InvalidKey</Code><Message>Unknown Key</Message></Error>
-                    Неверная подпись:
-                    <?xml version="1.0" encoding="UTF-8"?><Error><Code>MalformedSignature</Code><Message>Could not unencode Signature</Message></Error>
-                    Неверная политика:
-                    <?xml version="1.0" encoding="UTF-8"?><Error><Code>MalformedPolicy</Code><Message>Malformed Policy</Message></Error>
-                    
-                    При достижении лимита приходит HTML-страница:
-                    <HTML><HEAD><META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=iso-8859-1">
-                    <TITLE>ERROR: The request could not be satisfied</TITLE>
-                    </HEAD><BODY>
-                    <H1>403 ERROR</H1>
-                    <H2>The request could not be satisfied.</H2>
-                    <HR noshade size="1px">
-                    Request blocked.
-                    We can't connect to the server for this app or website at this time. There might be too much traffic or a configuration error. Try again later, or contact the app or website owner.
-                    ...
-                    """
-                    raise PermissionError("[403] STRAVA Access denied.")
+            try:
+                async with session.get(url, params=params) as response:
+                    if response.status == 200:
+                        content = await response.read()
+                        await self.cache.write(tile, content)
+                    elif response.status == 404:
+                        await self.cache.write(tile, EMPTY_TILE)
+                    else:
+                        print("For %r received an unexpected status code %d" % (tile, response.status))
+            except client_exceptions.ServerDisconnectedError as e:
+                raise PermissionError("It is necessary to lower the value of the semaphore. %s" % e) from e
+            except client_exceptions.ClientOSError as e:
+                raise PermissionError("%s" % e) from e
 
 
 class CacheWarmer:
@@ -207,7 +196,10 @@ class CacheWarmer:
                 tiles.append(tile)
                 if max_tiles and len(tiles) >= max_tiles:
                     break
-        self.strava_fetcher.fetch(tiles)
+        if not tiles:
+            print("There are no tiles to load")
+        else:
+            self.strava_fetcher.fetch(tiles)
 
 
 if __name__ == '__main__':
@@ -218,8 +210,11 @@ if __name__ == '__main__':
     warmer = CacheWarmer(cache, strava_fetcher)
 
     start_time = time()
-    warmer.warm_up(GeoPoint(46.90946, 30.19284),
-                   GeoPoint(46.10655, 31.39070),
-                   range(7, 17),
-                   max_tiles=6000)
+    try:
+        warmer.warm_up(GeoPoint(46.90946, 30.19284),
+                       GeoPoint(46.10655, 31.39070),
+                       range(7, 17),
+                       max_tiles=6000)
+    except PermissionError as e:
+        print("Error: %s" % e)
     print("Spent in", round((time() - start_time), 2), "seconds.")
