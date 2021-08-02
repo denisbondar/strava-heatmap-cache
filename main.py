@@ -173,7 +173,9 @@ class StravaFetcher:
                     elif response.status == 404:
                         await self.cache.write(tile, EMPTY_TILE)
                     else:
-                        print("For %r received an unexpected status code %d" % (tile, response.status))
+                        print("For %r received an unexpected status code %d: %s" % (tile,
+                                                                                    response.status,
+                                                                                    await response.text()))
             except client_exceptions.ServerDisconnectedError as e:
                 raise PermissionError("It is necessary to lower the value of the semaphore. %s" % e) from e
             except client_exceptions.ClientOSError as e:
@@ -214,7 +216,7 @@ if __name__ == '__main__':
         warmer.warm_up(GeoPoint(46.90946, 30.19284),
                        GeoPoint(46.10655, 31.39070),
                        range(7, 17),
-                       max_tiles=6000)
+                       max_tiles=8000)
     except PermissionError as e:
         print("Error: %s" % e)
     print("Spent in", round((time() - start_time), 2), "seconds.")
