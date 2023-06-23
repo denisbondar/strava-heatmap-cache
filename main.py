@@ -1,14 +1,20 @@
 import asyncio
+import logging
 import math
 import os
 from collections import namedtuple
 from random import choice
 from time import time
-from typing import List
 
 import aiofiles
 import aiohttp
 from aiohttp import client_exceptions
+
+logging.basicConfig(
+    format="%(asctime)s | %(levelname)-8s | %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
 CloudFrontAuth = namedtuple("CloudFrontAuth", "key_pair_id signature policy")
 GeoPoint = namedtuple("GeoPoint", "latitude longitude")
@@ -19,10 +25,13 @@ auth_data = CloudFrontAuth(os.getenv('KEY_PAIR_ID'),
                            os.getenv('SIGNATURE'),
                            os.getenv('POLICY'))
 
-EMPTY_TILE = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\x00\x00\x00\x01\x00\x01\x03\x00\x00\x00f\xbc:%\x00\x00" \
-             b"\x00\x03PLTE\x00\x00\x00\xa7z=\xda\x00\x00\x00\x01tRNS\x00@\xe6\xd8f\x00\x00\x00\x1fIDATh\xde\xed\xc1" \
-             b"\x01\r\x00\x00\x00\xc2 \xfb\xa76\xc77`\x00\x00\x00\x00\x00\x00\x00\x00q\x07!\x00\x00\x01\xa7W)\xd7\x00" \
-             b"\x00\x00\x00IEND\xaeB`\x82"
+point_1_x, point_1_y = os.getenv('AREA_APEX', '46.90946, 30.19284').split(',')
+point_2_x, point_2_y = os.getenv('AREA_VERTEX', '46.10655, 31.39070').split(',')
+
+EMPTY_TILE = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x01\x00\x00\x00\x01\x00\x01\x03\x00\x00\x00f\xbc:%" \
+             b"\x00\x00\x00\x03PLTE\x00\x00\x00\xa7z=\xda\x00\x00\x00\x01tRNS\x00@\xe6\xd8f\x00\x00\x00\x1f" \
+             b"IDATh\xde\xed\xc1\x01\r\x00\x00\x00\xc2 \xfb\xa76\xc77`\x00\x00\x00\x00\x00\x00\x00\x00q\x07!\x00" \
+             b"\x00\x01\xa7W)\xd7\x00\x00\x00\x00IEND\xaeB`\x82"
 
 
 class Tile:
@@ -35,21 +44,11 @@ class Tile:
     def create_from_geo_coordinates(cls,
                                     point: GeoPoint,
                                     zoom: int):
-        """
-        >>> Tile.create_from_geo_coordinates(GeoPoint(46.90946, 30.19284), 9)
-        Tile(298, 180, 9)
-        """
         x, y = cls.geo_to_tile(point, zoom)
         return cls(x, y, zoom)
 
     @staticmethod
     def geo_to_tile(point: GeoPoint, zoom):
-        """
-        >>> Tile.geo_to_tile(GeoPoint(46.90946, 30.19284), 9)
-        (298, 180)
-        >>> Tile.geo_to_tile(GeoPoint(46.10655, 31.39070), 9)
-        (300, 181)
-        """
         lat_rad = math.radians(point.latitude)
         n = 2.0 ** zoom
         x = int((point.longitude + 180.0) / 360.0 * n)
@@ -61,11 +60,6 @@ class Tile:
                            geo_coordinates_1: GeoPoint,
                            geo_coordinates_2: GeoPoint,
                            zoom_range):
-        """
-        >>> gen = Tile.generate_from_area(GeoPoint(46.90946, 30.19284), GeoPoint(46.10655, 31.39070), range(9, 10))
-        >>> [t for t in gen]
-        [Tile(298, 180, 9), Tile(299, 180, 9), Tile(300, 180, 9), Tile(298, 181, 9), Tile(299, 181, 9), Tile(300, 181, 9)]
-        """
         apex = GeoPoint(max(geo_coordinates_1.latitude, geo_coordinates_2.latitude),
                         min(geo_coordinates_1.longitude, geo_coordinates_2.longitude))
         vertex = GeoPoint(min(geo_coordinates_1.latitude, geo_coordinates_2.latitude),
@@ -80,6 +74,9 @@ class Tile:
 
     def __repr__(self) -> str:
         return f"Tile({self.x}, {self.y}, {self.z})"
+
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y and self.z == other.z
 
 
 def filename_for_file(tile: Tile) -> str:
@@ -127,7 +124,7 @@ class StravaFetcher:
         self.activity = activity
         self.color = color
 
-    def fetch(self, tiles: List[Tile]):
+    def fetch(self, tiles: list[Tile]):
         asyncio.run(self.task_queue(tiles))
 
     def __url(self, tile) -> str:
@@ -153,7 +150,7 @@ class StravaFetcher:
     def __tile_is_free(self, tile: Tile):
         return tile.z <= self.free_tile_max_zoom
 
-    async def task_queue(self, tiles: List[Tile]):
+    async def task_queue(self, tiles: list[Tile]):
         tasks = []
         for tile in tiles:
             tasks.append(asyncio.create_task(self.download_tile(tile)))
@@ -173,9 +170,9 @@ class StravaFetcher:
                     elif response.status == 404:
                         await self.cache.write(tile, EMPTY_TILE)
                     else:
-                        print("For %r received an unexpected status code %d: %s" % (tile,
-                                                                                    response.status,
-                                                                                    await response.text()))
+                        logger.warning(
+                            f"For {tile} received an unexpected status code {response.status}: {await response.text()}"
+                        )
             except client_exceptions.ServerDisconnectedError as e:
                 raise PermissionError("It is necessary to lower the value of the semaphore. %s" % e) from e
             except client_exceptions.ClientOSError as e:
@@ -199,24 +196,23 @@ class CacheWarmer:
                 if max_tiles and len(tiles) >= max_tiles:
                     break
         if not tiles:
-            print("There are no tiles to load")
+            logger.info("There are no tiles to load")
         else:
             self.strava_fetcher.fetch(tiles)
 
 
 if __name__ == '__main__':
-    # point_1 = (GeoPoint(float(x), float(y)) for x, y in os.getenv('AREA_APEX').split(','))
-    # point_2 = (GeoPoint(float(x), float(y)) for x, y in os.getenv('AREA_VERTEX').split(','))
     cache = Cache(cache_dir)
     strava_fetcher = StravaFetcher(auth_data, cache)
     warmer = CacheWarmer(cache, strava_fetcher)
 
     start_time = time()
+    logger.info("Start building cache.")
     try:
-        warmer.warm_up(GeoPoint(46.90946, 30.19284),
-                       GeoPoint(46.10655, 31.39070),
+        warmer.warm_up(GeoPoint(float(point_1_x.strip()), float(point_1_y.strip())),
+                       GeoPoint(float(point_2_x.strip()), float(point_2_y.strip())),
                        range(7, 17),
                        max_tiles=8000)
     except PermissionError as e:
-        print("Error: %s" % e)
-    print("Spent in", round((time() - start_time), 2), "seconds.")
+        logger.error(e)
+    logger.info(f"Spent in {round((time() - start_time), 2)} seconds.")
