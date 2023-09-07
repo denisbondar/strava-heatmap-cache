@@ -1,13 +1,9 @@
 @startuml
 
-package cache {
-    class Cache
-    class CacheWarmer
-}
-
 package strava {
-    struct CloudFrontAuth
+    class Cache
     class StravaFetcher
+    class CacheWarmer
 }
 
 package tile {
@@ -15,12 +11,12 @@ package tile {
     class Tile
 }
 
-Cache -> StravaFetcher
-CacheWarmer -> Cache
-CacheWarmer -> Tile
-CacheWarmer -> GeoPoint
+Cache -> Tile
 
-StravaFetcher -> CloudFrontAuth
+CacheWarmer -> Cache
+CacheWarmer -.> Tile
+CacheWarmer -.> GeoPoint
+
 StravaFetcher -> Cache
 StravaFetcher -> Tile
 
