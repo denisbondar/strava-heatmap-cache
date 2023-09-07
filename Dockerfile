@@ -11,7 +11,7 @@ RUN set -eux; \
 
 ENV PATH="/app/venv/bin:$PATH"
 
-COPY requirements.txt /
+COPY requirements.txt ./
 
 RUN pip install --no-cache-dir -r requirements.txt
 
