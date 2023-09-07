@@ -1,7 +1,7 @@
 # STRAVA Heatmap cache
 
 Скрипт предназначен для кэширования тайлов тепловой карты Strava с целью использования
-их в приложении OsmAnd в качестве оффлайн карты или в приложении JOSM также в качестве
+их в приложении OsmAnd в качестве офлайн карты или в приложении JOSM также в качестве
 слоя, помогающего при картографировании.
 
 Скрипт работает в двух режимах: режим загрузки тайлов в кэш и режим выдачи тайлов из кэша по протоколу HTTP.
@@ -15,24 +15,24 @@
 mkdir -p /var/strava-cache
 ```
 
-### Запуск построителя кэша
+### Запуск прогрева кэша
 
 Функция построения (прогрева) кэша проверяет наличие тайлов в кэше в заданной
 области географических координат и в заданном диапазоне масштабов. Если тайл
 отсутствует — он загружается с CDN-серверов Strava и сохраняется в кэше.
 
-Для запуска построителя кэша достаточно выполнить команду `build`
+Для запуска построителя кэша достаточно выполнить команду `warmup`
 в Docker-контейнере следующим образом:
 
 ```bash
 docker run --rm \
   --volume /var/strava-cache:/app/cache \
-  --env KEY_PAIR_ID=CloudFront-Key-Pair-Id_from_cookies \
-  --env SIGNATURE=CloudFront-Signature_from_cookies \
-  --env POLICY=CloudFront-Policy_from_cookies \
+  --env CLOUD_FRONT__KEY_PAIR_ID=CloudFront-Key-Pair-Id_from_cookies \
+  --env CLOUD_FRONT__SIGNATURE=CloudFront-Signature_from_cookies \
+  --env CLOUD_FRONT__POLICY=CloudFront-Policy_from_cookies \
   --name strava-heatmap-cache \
   denisbondar/strava-heatmap-cache \
-  build
+  warmup
 ```
 
 После того как построитель кэша отработает — работа контейнера будет завершена.
@@ -44,7 +44,7 @@ docker run --rm \
 
 #### Значения переменных в приведенных примерах
 
-В качестве значений для переменных окружения `KEY_PAIR_ID`, `SIGNATURE`, `POLICY`
+В качестве значений для переменных окружения `CLOUD_FRONT__KEY_PAIR_ID`, `CLOUD_FRONT__SIGNATURE`, `CLOUD_FRONT__POLICY`
 необходимо указать соответствующие значения, полученные из cookie на сайте
 https://www.strava.com/heatmap. Для этого аутентифицируйтесь на сайте, затем
 найдите в cookie домена strava.com переменные
@@ -66,9 +66,9 @@ https://www.strava.com/heatmap. Для этого аутентифицируйт
 docker run --rm \
   --volume /var/strava-cache:/app/cache \
   --publish 127.0.0.1:8080:8080 \
-  --env KEY_PAIR_ID=CloudFront-Key-Pair-Id_from_cookies \
-  --env SIGNATURE=CloudFront-Signature_from_cookies \
-  --env POLICY=CloudFront-Policy_from_cookies \
+  --env CLOUD_FRONT__KEY_PAIR_ID=CloudFront-Key-Pair-Id_from_cookies \
+  --env CLOUD_FRONT__SIGNATURE=CloudFront-Signature_from_cookies \
+  --env CLOUD_FRONT__POLICY=CloudFront-Policy_from_cookies \
   --name strava-heatmap-cache \
   denisbondar/strava-heatmap-cache
 ```

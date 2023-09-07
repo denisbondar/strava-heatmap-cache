@@ -9,8 +9,8 @@ _is_sourced() {
 }
 
 _main() {
-  if [ "$1" = 'build' ]; then
-    exec python /app/main.py
+  if [ "$1" = 'build' ] || [ "$1" = 'warmup' ]; then
+    exec python /app/heatmap/warmup.py
   fi
 
   exec "$@"

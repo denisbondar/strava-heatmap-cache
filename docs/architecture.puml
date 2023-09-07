@@ -1,0 +1,29 @@
+@startuml
+
+package cache {
+    class Cache
+    class CacheWarmer
+}
+
+package strava {
+    struct CloudFrontAuth
+    class StravaFetcher
+}
+
+package tile {
+    struct GeoPoint
+    class Tile
+}
+
+Cache -> StravaFetcher
+CacheWarmer -> Cache
+CacheWarmer -> Tile
+CacheWarmer -> GeoPoint
+
+StravaFetcher -> CloudFrontAuth
+StravaFetcher -> Cache
+StravaFetcher -> Tile
+
+Tile -> GeoPoint
+
+@enduml

@@ -2,11 +2,31 @@
 name = "Strave Headmap Chache"
 requires-python = ">=3.11"
 
+[tool.black]
+target-versions = ["py311"]
+include = "/heatmap/"
+line-length = 119
+
+[tool.isort]
+profile = "black"
+py_version=311
+src_paths = ["heatmap", "tests"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 119
+src = ["heatmap"]
+# https://beta.ruff.rs/docs/rules/
 select = [
-  "E",   # pycodestyle
-  "F",   # pyflakes
-  "UP",  # pyupgrade
+    "E", # pycodestyle
+    "F", # pyflakes
+    "W", # warning
+    #  "I",   # isort imports (не работает вместе с Black)
+    "N", # pep8-naming
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
 ]

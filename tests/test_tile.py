@@ -1,4 +1,4 @@
-from main import Tile, GeoPoint
+from heatmap.tile import GeoPoint, Tile
 
 
 def test_create_from_geo_coordinates():

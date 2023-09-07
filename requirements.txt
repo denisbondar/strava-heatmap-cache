@@ -1,2 +1,5 @@
 aiohttp
 aiofiles
+pydantic
+pydantic-settings
+python-dotenv
