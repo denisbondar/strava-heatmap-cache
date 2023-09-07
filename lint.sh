@@ -2,6 +2,7 @@
 
 set -e
 
-autoflake --in-place --remove-all-unused-imports --recursive heatmap tests
-isort .
+#autoflake --in-place --remove-all-unused-imports --recursive heatmap tests
+#isort .
 black .
+ruff check . --fix
